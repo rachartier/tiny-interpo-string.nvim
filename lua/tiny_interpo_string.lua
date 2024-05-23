@@ -6,17 +6,25 @@ local function need_to_replace_at_start(buf, interpo, at_start, node_type)
 		return
 	end
 
-	-- Get node and return early if not in a string
 	local node = vim.treesitter.get_node()
+	local node_found = false
 
 	if not node then
 		return
 	end
-	if node:type() ~= node_type then
-		node = node:parent()
+
+	for _, v in pairs(node_type) do
+		if node:type() ~= v then
+			node = node:parent()
+		end
+
+		if node and node:type() == v then
+			node_found = true
+		end
 	end
-	if not node or node:type() ~= node_type then
-		return
+
+	if not node_found then
+		return false, 0, 0
 	end
 
 	local row, col, _, _ = vim.treesitter.get_node_range(node)
@@ -35,13 +43,13 @@ M.setup = function(options)
 			ftype = "*.py",
 			at_start = "f",
 			interpo = "{",
-			node_type = "string",
+			node_type = { "string" },
 		},
 		cs = {
 			ftype = "*.cs",
 			at_start = "$",
 			interpo = "{",
-			node_type = "string_literal",
+			node_type = { "string_literal" },
 		},
 	}
 
@@ -54,13 +62,17 @@ M.setup = function(options)
 		local node_type = v.node_type
 		local name = ftype:sub(2)
 
-		utils.on_event("InsertCharPre", function(args)
-			local need_to_replace, row, col = need_to_replace_at_start(args.buf, interpo, at_start, node_type)
+		vim.api.nvim_create_autocmd("InsertCharPre", {
+			callback = function(args)
+				local need_to_replace, row, col = need_to_replace_at_start(args.buf, interpo, at_start, node_type)
 
-			if need_to_replace then
-				vim.api.nvim_input("<Esc>m'" .. row .. "gg" .. col .. "|i" .. at_start .. "<Esc>`'la}<Esc>ba")
-			end
-		end, { desc = "Auto interpo " .. name })
+				if need_to_replace then
+					vim.api.nvim_input("<Esc>m'" .. row .. "gg" .. col .. "|i" .. at_start .. "<Esc>`'la}<Esc>ba")
+				end
+			end,
+			pattern = ftype,
+			desc = "Auto interpo " .. name,
+		})
 	end
 end
 
